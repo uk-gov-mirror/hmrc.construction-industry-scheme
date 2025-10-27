@@ -383,7 +383,8 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
     "returns 200 with SUBMITTED status when timestamp is more than 25 seconds in the past" in {
       val service = mock[SubmissionService]
-      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val controller = mkController(service, auth = authAction)
 
       val oldTimestamp = Instant.now().minusSeconds(30)
       val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
@@ -402,7 +403,8 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
     "returns 200 with PENDING status and pollUrl when timestamp is less than 25 seconds in the past" in {
       val service = mock[SubmissionService]
-      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val controller = mkController(service, auth = authAction)
 
       val recentTimestamp = Instant.now().minusSeconds(10)
       val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$recentTimestamp", "UTF-8")
@@ -421,7 +423,8 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
     "returns 200 with PENDING status when timestamp is in the future" in {
       val service = mock[SubmissionService]
-      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val controller = mkController(service, auth = authAction)
 
       val futureTimestamp = Instant.now().plusSeconds(60)
       val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$futureTimestamp", "UTF-8")
@@ -438,9 +441,46 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
       verifyNoInteractions(service)
     }
 
+    "returns 200 with FATAL_ERROR when TaxOfficeReference does not match expected value" in {
+      val service = mock[SubmissionService]
+      val authAction = fakeAuthAction(ton = "123", tor = "AB456")
+      val controller = mkController(service, auth = authAction)
+
+      val oldTimestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
+      val correlationId = "CORR-BAD-TOR"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "FATAL_ERROR"
+      verifyNoInteractions(service)
+    }
+
+    "returns 200 with FATAL_ERROR when HMRC-CIS-ORG enrolment is missing" in {
+      val service = mock[SubmissionService]
+      val controller = mkController(service, auth = noEnrolmentReferenceAuthAction)
+
+      val oldTimestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
+      val correlationId = "CORR-NO-ENROL"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "FATAL_ERROR"
+      verifyNoInteractions(service)
+    }
+
     "returns 401 when unauthorised" in {
       val service = mock[SubmissionService]
-      val controller = new SubmissionController(rejectingAuthAction, service, cc)
+      val controller = mkController(service, auth = rejectingAuthAction)
 
       val timestamp = Instant.now().minusSeconds(30)
       val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$timestamp", "UTF-8")

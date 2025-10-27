@@ -117,7 +117,16 @@ class SubmissionController @Inject()(
     authorise.async { implicit req =>
       val timestamp = Instant.parse(java.net.URLDecoder.decode(pollUrl, Charset.forName("UTF-8")).split('=').apply(1))
 
-      if (Instant.now.isAfter(timestamp.plusSeconds(25)))
+      if (!req.enrolments
+        .getEnrolment("HMRC-CIS-ORG")
+        .flatMap(_.getIdentifier("TaxOfficeReference"))
+        .map(_.value)
+        .contains("EZ00100")
+      )
+        Future.successful(Ok(Json.obj(
+          "status" -> "FATAL_ERROR"
+        )))
+      else if (Instant.now.isAfter(timestamp.plusSeconds(25)))
         Future.successful(Ok(Json.obj(
           "status" -> "SUBMITTED"
         )))
