@@ -8,3 +8,4 @@ GET        /scheme/email/:instanceId                            uk.gov.hmrc.cons
 POST       /submissions/create                                  uk.gov.hmrc.constructionindustryscheme.controllers.SubmissionController.createSubmission
 POST       /submissions/:submissionId/submit-to-chris           uk.gov.hmrc.constructionindustryscheme.controllers.SubmissionController.submitToChris(submissionId: String)
 POST       /submissions/:submissionId/update                    uk.gov.hmrc.constructionindustryscheme.controllers.SubmissionController.updateSubmission(submissionId: String)
+GET       /submissions/poll                                    uk.gov.hmrc.constructionindustryscheme.controllers.SubmissionController.pollSubmission(pollUrl: String, correlationId: String)

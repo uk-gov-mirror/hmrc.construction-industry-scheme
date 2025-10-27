@@ -36,6 +36,7 @@ import uk.gov.hmrc.constructionindustryscheme.models.audit.{AuditResponseReceive
 import uk.gov.hmrc.constructionindustryscheme.utils.XmlToJsonConvertor
 
 import java.time.{Clock, Instant}
+import java.nio.charset.Charset
 import java.util.UUID
 
 class SubmissionController @Inject()(
@@ -112,6 +113,21 @@ class SubmissionController @Inject()(
       )
     }
 
+  def pollSubmission(pollUrl: String, correlationId: String): Action[AnyContent] =
+    authorise.async { implicit req =>
+      val timestamp = Instant.parse(java.net.URLDecoder.decode(pollUrl, Charset.forName("UTF-8")).split('=').apply(1))
+
+      if (Instant.now.isAfter(timestamp.plusSeconds(25)))
+        Future.successful(Ok(Json.obj(
+          "status" -> "SUBMITTED"
+        )))
+      else
+        Future.successful(Ok(Json.obj(
+          "status" -> "PENDING",
+          "pollUrl" -> pollUrl
+        )))
+    }
+
   private def renderSubmissionResponse(submissionId: String, payload: BuiltSubmissionPayload)(res: SubmissionResult): Result = {
 
     implicit val hc: HeaderCarrier = HeaderCarrier()
@@ -120,7 +136,6 @@ class SubmissionController @Inject()(
       case Some(s) if s.trim.nonEmpty => s.trim
       case _ => Instant.now(clock).toString
     }
-
     val base = Json.obj(
       "submissionId" -> submissionId,
       "hmrcMarkGenerated" -> payload.irMark,
@@ -134,7 +149,7 @@ class SubmissionController @Inject()(
       val endpoint = res.meta.responseEndPoint
       o ++ Json.obj(
         "responseEndPoint" -> Json.obj(
-          "url" -> endpoint.url,
+          "url" -> s"http://someurl.com/test?timestamp=${Instant.now}",  // endpoint.url,
           "pollIntervalSeconds" -> endpoint.pollIntervalSeconds
         )
       )

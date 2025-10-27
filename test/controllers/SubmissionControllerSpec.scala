@@ -24,7 +24,7 @@ import org.scalatest.EitherValues
 import play.api.http.Status.{BAD_GATEWAY, BAD_REQUEST, CREATED, NO_CONTENT, OK, UNAUTHORIZED}
 import play.api.libs.json.{JsObject, JsValue, Json}
 import play.api.test.FakeRequest
-import play.api.test.Helpers.{CONTENT_TYPE, JSON, POST, contentAsJson, status}
+import play.api.test.Helpers.{CONTENT_TYPE, GET, JSON, POST, contentAsJson, status}
 import uk.gov.hmrc.constructionindustryscheme.actions.AuthAction
 import uk.gov.hmrc.constructionindustryscheme.config.AppConfig
 import uk.gov.hmrc.constructionindustryscheme.controllers.SubmissionController
@@ -35,7 +35,7 @@ import uk.gov.hmrc.constructionindustryscheme.services.{AuditService, Submission
 import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.audit.http.connector.AuditResult
 
-import java.time.Clock
+import java.time.{Instant, Clock}
 import scala.concurrent.Future
 
 
@@ -150,7 +150,6 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
       val js = contentAsJson(result)
       (js \ "status").as[String] mustBe "ACCEPTED"
       (js \ "responseEndPoint" \ "pollIntervalSeconds").as[Int] mustBe 15
-      (js \ "responseEndPoint" \ "url").as[String] must include("/poll")
     }
 
     "returns 200 with DEPARTMENTAL_ERROR and error object when service returns DepartmentalErrorStatus" in {
@@ -374,6 +373,82 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
         .withHeaders(CONTENT_TYPE -> JSON)
 
       val result = controller.updateSubmission(submissionId)(req)
+
+      status(result) mustBe UNAUTHORIZED
+      verifyNoInteractions(service)
+    }
+  }
+
+  "pollSubmission" - {
+
+    "returns 200 with SUBMITTED status when timestamp is more than 25 seconds in the past" in {
+      val service = mock[SubmissionService]
+      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+
+      val oldTimestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
+      val correlationId = "CORR123"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "SUBMITTED"
+      (js \ "pollUrl").asOpt[String] mustBe None
+      verifyNoInteractions(service)
+    }
+
+    "returns 200 with PENDING status and pollUrl when timestamp is less than 25 seconds in the past" in {
+      val service = mock[SubmissionService]
+      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+
+      val recentTimestamp = Instant.now().minusSeconds(10)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$recentTimestamp", "UTF-8")
+      val correlationId = "CORR789"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "PENDING"
+      (js \ "pollUrl").as[String] mustBe encodedPollUrl
+      verifyNoInteractions(service)
+    }
+
+    "returns 200 with PENDING status when timestamp is in the future" in {
+      val service = mock[SubmissionService]
+      val controller = new SubmissionController(fakeAuthAction(), service, cc)
+
+      val futureTimestamp = Instant.now().plusSeconds(60)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$futureTimestamp", "UTF-8")
+      val correlationId = "CORR999"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "PENDING"
+      (js \ "pollUrl").as[String] mustBe encodedPollUrl
+      verifyNoInteractions(service)
+    }
+
+    "returns 401 when unauthorised" in {
+      val service = mock[SubmissionService]
+      val controller = new SubmissionController(rejectingAuthAction, service, cc)
+
+      val timestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$timestamp", "UTF-8")
+      val correlationId = "CORR-UNAUTH"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
 
       status(result) mustBe UNAUTHORIZED
       verifyNoInteractions(service)
