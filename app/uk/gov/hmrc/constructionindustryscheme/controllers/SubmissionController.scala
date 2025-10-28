@@ -117,24 +117,30 @@ class SubmissionController @Inject()(
     authorise.async { implicit req =>
       val timestamp = Instant.parse(java.net.URLDecoder.decode(pollUrl, Charset.forName("UTF-8")).split('=').apply(1))
 
-      if (!req.enrolments
+      val taxOfficeNumber = req.enrolments
         .getEnrolment("HMRC-CIS-ORG")
-        .flatMap(_.getIdentifier("TaxOfficeReference"))
+        .flatMap(_.getIdentifier("TaxOfficeNumber"))
         .map(_.value)
-        .contains("EZ00100")
-      )
-        Future.successful(Ok(Json.obj(
-          "status" -> "FATAL_ERROR"
-        )))
-      else if (Instant.now.isAfter(timestamp.plusSeconds(25)))
+
+      if (taxOfficeNumber.contains("754") && Instant.now.isAfter(timestamp.plusSeconds(15))) {
         Future.successful(Ok(Json.obj(
           "status" -> "SUBMITTED"
         )))
-      else
+      } else if (taxOfficeNumber.contains("755") && Instant.now.isAfter(timestamp.plusSeconds(15))) {
+        Future.successful(Ok(Json.obj(
+          "status" -> "FATAL_ERROR"
+        )))
+      }
+      else if (taxOfficeNumber.contains("756") && Instant.now.isAfter(timestamp.plusSeconds(15))) {
+        Future.successful(Ok(Json.obj(
+          "status" -> "DEPARTMENTAL_ERROR"
+        )))
+      } else {
         Future.successful(Ok(Json.obj(
           "status" -> "PENDING",
           "pollUrl" -> pollUrl
         )))
+      }
     }
 
   private def renderSubmissionResponse(submissionId: String, payload: BuiltSubmissionPayload)(res: SubmissionResult): Result = {

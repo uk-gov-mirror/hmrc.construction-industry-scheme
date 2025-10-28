@@ -381,9 +381,9 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
   "pollSubmission" - {
 
-    "returns 200 with SUBMITTED status when timestamp is more than 25 seconds in the past" in {
+    "returns 200 with SUBMITTED status when timestamp is more than 25 seconds in the past and office number is 754" in {
       val service = mock[SubmissionService]
-      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val authAction = fakeAuthAction(ton = "754", tor = "EZ00100")
       val controller = mkController(service, auth = authAction)
 
       val oldTimestamp = Instant.now().minusSeconds(30)
@@ -401,9 +401,49 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
       verifyNoInteractions(service)
     }
 
+    "returns 200 with FATAL_ERROR status when timestamp is more than 25 seconds in the past and office number is 755" in {
+      val service = mock[SubmissionService]
+      val authAction = fakeAuthAction(ton = "755", tor = "EZ00100")
+      val controller = mkController(service, auth = authAction)
+
+      val oldTimestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
+      val correlationId = "CORR123"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "FATAL_ERROR"
+      (js \ "pollUrl").asOpt[String] mustBe None
+      verifyNoInteractions(service)
+    }
+
+    "returns 200 with DEPARTMENTAL_ERROR status when timestamp is more than 25 seconds in the past and office number is 756" in {
+      val service = mock[SubmissionService]
+      val authAction = fakeAuthAction(ton = "756", tor = "EZ00100")
+      val controller = mkController(service, auth = authAction)
+
+      val oldTimestamp = Instant.now().minusSeconds(30)
+      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
+      val correlationId = "CORR123"
+
+      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
+
+      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
+
+      status(result) mustBe OK
+      val js = contentAsJson(result)
+      (js \ "status").as[String] mustBe "DEPARTMENTAL_ERROR"
+      (js \ "pollUrl").asOpt[String] mustBe None
+      verifyNoInteractions(service)
+    }
+
     "returns 200 with PENDING status and pollUrl when timestamp is less than 25 seconds in the past" in {
       val service = mock[SubmissionService]
-      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val authAction = fakeAuthAction(ton = "754", tor = "EZ00100")
       val controller = mkController(service, auth = authAction)
 
       val recentTimestamp = Instant.now().minusSeconds(10)
@@ -423,7 +463,7 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
     "returns 200 with PENDING status when timestamp is in the future" in {
       val service = mock[SubmissionService]
-      val authAction = fakeAuthAction(ton = "EZ001", tor = "EZ00100")
+      val authAction = fakeAuthAction(ton = "754", tor = "EZ00100")
       val controller = mkController(service, auth = authAction)
 
       val futureTimestamp = Instant.now().plusSeconds(60)
@@ -441,9 +481,9 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
       verifyNoInteractions(service)
     }
 
-    "returns 200 with FATAL_ERROR when TaxOfficeReference does not match expected value" in {
+    "returns 200 with PENDING when timestamp is more than 25 seconds in the past and TaxOfficeNumber does not match expected value" in {
       val service = mock[SubmissionService]
-      val authAction = fakeAuthAction(ton = "123", tor = "AB456")
+      val authAction = fakeAuthAction()
       val controller = mkController(service, auth = authAction)
 
       val oldTimestamp = Instant.now().minusSeconds(30)
@@ -456,25 +496,7 @@ final class SubmissionControllerSpec extends SpecBase with EitherValues {
 
       status(result) mustBe OK
       val js = contentAsJson(result)
-      (js \ "status").as[String] mustBe "FATAL_ERROR"
-      verifyNoInteractions(service)
-    }
-
-    "returns 200 with FATAL_ERROR when HMRC-CIS-ORG enrolment is missing" in {
-      val service = mock[SubmissionService]
-      val controller = mkController(service, auth = noEnrolmentReferenceAuthAction)
-
-      val oldTimestamp = Instant.now().minusSeconds(30)
-      val encodedPollUrl = java.net.URLEncoder.encode(s"http://example.com/poll?timestamp=$oldTimestamp", "UTF-8")
-      val correlationId = "CORR-NO-ENROL"
-
-      val req = FakeRequest(GET, s"/cis/submissions/poll?pollUrl=$encodedPollUrl&correlationId=$correlationId")
-
-      val result = controller.pollSubmission(encodedPollUrl, correlationId)(req)
-
-      status(result) mustBe OK
-      val js = contentAsJson(result)
-      (js \ "status").as[String] mustBe "FATAL_ERROR"
+      (js \ "status").as[String] mustBe "PENDING"
       verifyNoInteractions(service)
     }
 
